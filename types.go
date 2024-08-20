@@ -5,13 +5,12 @@ import (
 )
 
 // NodeType represents the type of a node in the Raft cluster.
-type NodeType string
+type NodeType int
 
-// Possible node types in Raft.
 const (
-	Follower  NodeType = "follower"
-	Candidate NodeType = "candidate"
-	Leader    NodeType = "leader"
+	Follower NodeType = iota
+	Candidate
+	Leader
 )
 
 // LogEntry represents a single entry in the Raft log.
@@ -20,29 +19,26 @@ type LogEntry struct {
 	Command string
 }
 
-// RequestVoteReqBody represents the body of a requestVote RPC.
 type RequestVoteReqBody struct {
-	Term         int    `json:"term"`
-	CandidateId  string `json:"candidateId"`
-	LastLogIndex int    `json:"lastLogIndex"`
-	LastLogTerm  int    `json:"lastLogTerm"`
+	Term         int
+	CandidateId  string
+	LastLogIndex int
+	LastLogTerm  int
 }
 
-// AppendEntriesReqBody represents the body of an appendEntries RPC.
 type AppendEntriesReqBody struct {
-	From         string     `json:"from"`
-	Term         int        `json:"term"`
-	LeaderId     string     `json:"leaderId"`
-	PrevLogIndex int        `json:"prevLogIndex"`
-	PrevLogTerm  int        `json:"prevLogTerm"`
-	Entries      []LogEntry `json:"entries"`
-	LeaderCommit int        `json:"leaderCommit"`
+	From         string
+	Term         int
+	LeaderId     string
+	PrevLogIndex int
+	PrevLogTerm  int
+	Entries      []LogEntry
+	LeaderCommit int
 }
 
-// Vote represents a response to a requestVote or appendEntries RPC.
 type Vote struct {
-	Term        int  `json:"term"`
-	VoteGranted bool `json:"voteGranted"`
+	Term        int
+	VoteGranted bool
 }
 
 // RaftNode represents a node in the Raft cluster.
@@ -54,6 +50,7 @@ type RaftNode struct {
 	Type        NodeType
 	Peers       []string
 	CommitIndex int
+	LastApplied int
 	Leader      string
 	State       []int
 	Timer       *Timer

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"math/rand"
 	"time"
 )
@@ -30,14 +31,20 @@ func countVotes(votes []Vote) (int, int) {
 
 func executeCommand(node *RaftNode, command string) {
 	switch command {
-	case "0":
-		node.State[0]++
-	case "1":
-		node.State[1]++
-	case "2":
-		node.State[2]++
-	case "3":
-		node.State[3]++
+	case "Set x=1":
+		node.State[0] = 1
+	case "Set x=2":
+		node.State[0] = 2
+	case "Set x=3":
+		node.State[0] = 3
+	case "Set y=1":
+		node.State[1] = 1
+	case "Set y=2":
+		node.State[1] = 2
+	case "Set y=3":
+		node.State[1] = 3
+	default:
+		fmt.Printf("Unknown command: %s\n", command)
 	}
 }
 
@@ -46,4 +53,23 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// GenerateRandomCommand generates a random command to change the value of x or y.
+func GenerateRandomCommand() string {
+	rand.Seed(time.Now().UnixNano()) // Seed the random number generator
+
+	// Define possible commands for x and y with their values
+	commands := []string{
+		"Set x=1",
+		"Set x=2",
+		"Set x=3",
+		"Set y=1",
+		"Set y=2",
+		"Set y=3",
+	}
+
+	// Randomly select a command
+	randomIndex := rand.Intn(len(commands))
+	return commands[randomIndex]
 }

@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+
 	"time"
 )
 
@@ -19,6 +20,7 @@ func NewRaftNode(id string, peers []string) *RaftNode {
 		Type:        Follower,
 		Peers:       peers,
 		CommitIndex: 0,
+		LastApplied: 0,
 		Leader:      "",
 		State:       make([]int, 4),
 		Timer:       NewTimer(),
@@ -102,7 +104,7 @@ func (n *RaftNode) votingProcedure() {
 }
 
 func (n *RaftNode) sendHeartBeats() {
-	ticker := time.NewTicker(1 * time.Second)
+	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
 	for range ticker.C {
@@ -113,13 +115,20 @@ func (n *RaftNode) sendHeartBeats() {
 		var prevLogIndex int
 		var prevLogTerm int
 
-		// Check if the log is empty before accessing elements
 		if len(n.Log) > 0 {
 			prevLogIndex = len(n.Log) - 1
 			prevLogTerm = n.Log[prevLogIndex].Term
+			command := GenerateRandomCommand()
+			fmt.Println("Generated Command:", command)
+			n.Log = append(n.Log, LogEntry{Term: n.CurrentTerm + 1, Command: command})
 		} else {
 			prevLogIndex = -1
 			prevLogTerm = -1
+		}
+		if len(n.Log) == 0 {
+			command := GenerateRandomCommand()
+			fmt.Println("Generated Command:", command)
+			n.Log = append(n.Log, LogEntry{Term: n.CurrentTerm, Command: command})
 		}
 
 		for _, peer := range n.Peers {
@@ -130,17 +139,18 @@ func (n *RaftNode) sendHeartBeats() {
 					LeaderId:     n.ID,
 					PrevLogIndex: prevLogIndex,
 					PrevLogTerm:  prevLogTerm,
-					Entries:      []LogEntry{},
+					Entries:      n.Log,
 					LeaderCommit: n.CommitIndex,
 				}
 				_, err := postRequest(fmt.Sprintf("http://localhost:%s/appendEntries", peer), body)
 				if err != nil {
-
 				}
 			}(peer)
 		}
 
-		fmt.Printf("Leader %s sent heartbeats\n", n.ID)
+		fmt.Printf("Leader %s sent heartbeats and Command\n", n.ID)
+		fmt.Println("Leader Logs :", n.Log)
+		fmt.Println("------------------------------------------------")
 	}
 }
 
@@ -169,7 +179,6 @@ func main() {
 	port := os.Args[1]
 	peers := []string{"3000", "4000", "5000", "6000", "7000"}
 
-	// Remove the current node's port from the peers list
 	for i, p := range peers {
 		if p == port {
 			peers = append(peers[:i], peers[i+1:]...)
@@ -217,42 +226,38 @@ func main() {
 		raftNode.mu.Lock()
 		defer raftNode.mu.Unlock()
 
-		if len(req.Entries) == 0 {
-			fmt.Printf("Received HeartBeat from ID %s\n", req.From)
-			raftNode.Leader = req.From
-			raftNode.Timer.Reset()
-			return
-		}
-
-		fmt.Println("Log entries: ", req.Entries)
-		fmt.Println("State before: ", raftNode.State)
-
-		for _, entry := range req.Entries {
-			executeCommand(raftNode, entry.Command)
-		}
-
-		fmt.Println("State after: ", raftNode.State)
-
-		if raftNode.Type == Candidate {
-			raftNode.Type = Follower
-		}
-
 		if req.Term < raftNode.CurrentTerm {
 			json.NewEncoder(w).Encode(Vote{Term: raftNode.CurrentTerm, VoteGranted: false})
 			return
 		}
 
-		if raftNode.Log[req.PrevLogIndex].Term != req.PrevLogTerm {
-			json.NewEncoder(w).Encode(Vote{Term: req.Term, VoteGranted: false})
-			return
+		raftNode.Leader = req.LeaderId
+		raftNode.CurrentTerm = req.Term
+		raftNode.Timer.Reset()
+		fmt.Printf("Received Append Entries from ID %s\n", req.From)
+		fmt.Println("Log entries before update: ", raftNode.Log)
+		fmt.Println("State before update: ", raftNode.State)
+
+		for i, entry := range req.Entries {
+			expectedIndex := req.PrevLogIndex + 1 + i
+
+			if expectedIndex < len(raftNode.Log) {
+				raftNode.Log[expectedIndex] = entry
+			} else {
+				raftNode.Log = append(raftNode.Log, entry)
+			}
+
+			executeCommand(raftNode, entry.Command)
 		}
 
-		if req.LeaderCommit > raftNode.CommitIndex {
-			raftNode.CommitIndex = min(req.LeaderCommit, req.PrevLogIndex)
-		}
+		fmt.Println("Log entries after update: ", raftNode.Log)
+		fmt.Println("State after update: ", raftNode.State)
+		fmt.Println("------------------------------------------------")
+
+		raftNode.CommitIndex = req.LeaderCommit
 
 		json.NewEncoder(w).Encode(Vote{Term: req.Term, VoteGranted: true})
 	})
 
-	http.ListenAndServe(":"+port, nil)
+	log.Fatal(http.ListenAndServe(":"+port, nil))
 }

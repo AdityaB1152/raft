@@ -1,47 +1,45 @@
 package main
 
 import (
-	"sync"
 	"time"
 )
 
-type Timer struct {
-	timer    *time.Timer
-	randTime time.Duration
-	mu       sync.Mutex
-	callback func()
-}
-
 func NewTimer() *Timer {
-	return &Timer{}
-}
-
-func (t *Timer) Start(randTime time.Duration) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	t.randTime = randTime
-	t.timer = time.AfterFunc(randTime, func() {
-		if t.callback != nil {
-			t.callback()
-		}
-	})
-}
-
-func (t *Timer) Stop() {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	if t.timer != nil {
-		t.timer.Stop()
+	return &Timer{
+		C: make(chan struct{}, 1),
 	}
 }
 
-func (t *Timer) Reset() {
-	t.Stop()
-	t.Start(t.randTime)
+type Timer struct {
+	C      chan struct{}
+	Timer  *time.Timer
+	Period time.Duration
 }
 
-func (t *Timer) OnTimeout(callback func()) {
-	t.callback = callback
+func (t *Timer) Start(period time.Duration) {
+	t.Period = period
+	t.Timer = time.AfterFunc(t.Period, func() {
+		t.C <- struct{}{}
+	})
+}
+
+func (t *Timer) Reset() {
+	if t.Timer != nil {
+		t.Timer.Stop()
+	}
+	t.Start(t.Period)
+}
+
+func (t *Timer) Stop() {
+	if t.Timer != nil {
+		t.Timer.Stop()
+	}
+}
+
+func (t *Timer) OnTimeout(f func()) {
+	go func() {
+		for range t.C {
+			f()
+		}
+	}()
 }
